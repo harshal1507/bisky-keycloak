@@ -1,0 +1,37 @@
+services:
+  - docker:stable-dind
+stages:
+  - build jar
+  - build and push docker image
+variables:
+  APPLICATION_NAME: "spring-boot-code-with-bisky-integrations"
+  TAG_NAME: "dev"
+  DOCKER_IMAGE: "codewithbisky/spring-boot-code-with-bisky-integrations"
+build:
+  image: maven:3.8.3-openjdk-17
+  stage: build jar
+  script:
+    - mvn clean package
+  artifacts:
+    paths:
+      - target/*.jar
+docker build:
+  image: docker:latest
+  stage: build and push docker image
+  rules:
+    - if: ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_REF_NAME == "main")
+      variables:
+        TAG_NAME: "latest"
+    - if: ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_REF_NAME == "develop")
+      variables:
+        TAG_NAME: "develop"
+  script:
+    - apk add --update --no-cache curl py-pip
+    - pip install awscli
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region $AWS_REGION
+    - docker build -t $DOCKER_IMAGE .
+    - docker tag $DOCKER_IMAGE:latest 223358806502.dkr.ecr.eu-west-3.amazonaws.com/$DOCKER_IMAGE:$TAG_NAME
+    - aws ecr get-login-password --region eu-west-3 | docker login --username AWS --password-stdin 223358806502.dkr.ecr.eu-west-3.amazonaws.com
+    - docker push 223358806502.dkr.ecr.eu-west-3.amazonaws.com/$DOCKER_IMAGE:$TAG_NAME
